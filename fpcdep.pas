@@ -3,7 +3,10 @@ program fpcdep;
 {$mode objfpc}{$H+}
 
 uses
-  SysUtils, Classes, StrUtils;
+  Classes, GetOpts, SysUtils, StrUtils;
+
+const
+  UnitExtensions: array[0..1] of String = ('.pas', '.pp');
 
 var
   UnitPaths: TStringList;
@@ -95,14 +98,13 @@ var
   Candidate: String;
   LowerStr: String;
   Ext: String;
-  Exts: array[0..2] of String = ('.pas', '.pp', '.ppu');
 begin
   if UnitName.IsEmpty then exit;
 
   // Search in UnitPaths with possible extensions
   for I := 0 to UnitPaths.Count - 1 do begin
-    for K := 0 to High(Exts) do begin
-      Ext := Exts[K];
+    for K := 0 to High(UnitExtensions) do begin
+      Ext := UnitExtensions[K];
 
       if (not UnitPaths[I].IsEmpty) then
         Candidate := IncludeTrailingPathDelimiter(UnitPaths[I]) + UnitName + Ext
@@ -125,8 +127,8 @@ begin
   end;
 
   // Fallback to current dir and baseDir
-  for K := 0 to High(Exts) do begin
-    Ext := Exts[K];
+  for K := 0 to High(UnitExtensions) do begin
+    Ext := UnitExtensions[K];
     Candidate := UnitName + Ext;
 
     // Try direct match first
@@ -394,50 +396,65 @@ end;
 
 procedure PrintUsage;
 begin
-  Writeln('Usage: fpcdep [options] <input>');
+  Writeln('Free Pascal Dependency Generator version 1.0');
+  Writeln('fpcdep [options] <input>');
   Writeln('Options:');
   Writeln('  -Fu <path>    Add <path> to unit search path (can repeat)');
   Writeln('  -Fi <path>    Add <path> to include search path (can repeat)');
   Writeln('  -I  <path>    Add <path> to include search path (can repeat)');
   Writeln('  -o  <file>    Output dependency file (default: <input>.d)');
   Writeln('  -t  <target>  Target name to put before colon in dependency file (default: <input>.o)');
+  Writeln('  -h            Show this help message');
 end;
 
 var
-  I: Integer = 1;
   SrcFile: String = '';
   OutFile: String = '';
   TargetName: String = '';
+  OptCh: Char;
 
 begin
-  UnitPaths := TStringList.Create;
-  IncludePaths := TStringList.Create;
-
-  ProcessedFiles := TStringList.Create;
-  ProcessedFiles.Sorted := True;
-  ProcessedFiles.Duplicates := dupIgnore;
-
-  CollectedDeps := TStringList.Create;
-  CollectedDeps.Sorted := True;
-  CollectedDeps.Duplicates := dupIgnore;
-
   try
-    while I <= ParamCount do begin
-      case ParamStr(I) of
-        '-h', '--help': begin PrintUsage; exit; end;
-        '-o': if I < ParamCount then begin Inc(I); OutFile := ParamStr(I); end;
-        '-t': if I < ParamCount then begin Inc(I); TargetName := ParamStr(I); end;
-        '-Fu': if I < ParamCount then begin Inc(I); UnitPaths.AddStrings(ParamStr(I)); end;
-        '-Fi', '-I': if I < ParamCount then begin Inc(I); IncludePaths.AddStrings(ParamStr(I)); end;
-        else if SrcFile.IsEmpty then SrcFile := ParamStr(I) else begin PrintUsage; exit; end;
+    UnitPaths := TStringList.Create;
+    IncludePaths := TStringList.Create;
+
+    ProcessedFiles := TStringList.Create;
+    ProcessedFiles.Sorted := True;
+    ProcessedFiles.Duplicates := dupIgnore;
+
+    CollectedDeps := TStringList.Create;
+    CollectedDeps.Sorted := True;
+    CollectedDeps.Duplicates := dupIgnore;
+
+    // Parse command-line arguments
+    OptErr := false;
+    repeat
+      OptCh := GetOpt('ho:t:F:I:');
+      case OptCh of
+        'h': begin PrintUsage; exit; end;
+        'o': OutFile := Trim(OptArg);
+        't': TargetName := Trim(OptArg);
+        'F': begin
+          case OptArg[1] of
+            'i': IncludePaths.AddStrings(Trim(Copy(OptArg, 2, MaxInt)));
+            'u': UnitPaths.AddStrings(Trim(Copy(OptArg, 2, MaxInt)));
+          end;
+        end;
+        'I': IncludePaths.AddStrings(Trim(OptArg));
       end;
-      Inc(I);
+    until OptCh = EndOfOptions;
+
+    // The remaining argument is the source file
+    if OptInd <= ParamCount then
+      SrcFile := ParamStr(OptInd)
+    else begin
+      PrintUsage;
+      exit;
     end;
 
-    // Validate input and set defaults
-    if SrcFile.IsEmpty then begin PrintUsage; exit; end;
+    // Set default output file and target name if not provided
     if OutFile.IsEmpty then OutFile := ChangeFileExt(SrcFile, '.d');
-    if TargetName.IsEmpty then TargetName := SrcFile;
+    if TargetName.IsEmpty then TargetName := ChangeFileExt(SrcFile, '.o');
 
     // Ensure current directory is in search paths
     if UnitPaths.IndexOf('') = -1 then UnitPaths.Add('');
