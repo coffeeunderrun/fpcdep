@@ -1,0 +1,9 @@
+[package]
+name=fpcdep
+version=1.0
+
+[target]
+programs=fpcdep
+
+[compiler]
+targetdir=bin
