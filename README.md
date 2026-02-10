@@ -2,6 +2,10 @@
 
 Small Free Pascal utility to generate Makefile-style dependency files from Pascal source.
 
+> [!CAUTION]
+> This utility will no longer be maintained for the foreseeable future. I created it to be used with a complex Makefile build system for my hobby OS kernel.
+> I have since moved to using the FPMAKE build system which has rendered this utility deprecated.
+
 ## Required
 
 `fpc`
